@@ -183,7 +183,7 @@ function kAdminServer:OnVoteKick(p_Player, p_Mask, p_Message, p_Commands)
 	for s_Index, s_Player in pairs(s_Players) do
 		print("Searching:" .. s_Player.name)
 		
-		if string.match(s_Player.name, s_PlayerSearchString) then
+		if string.match(string.lower(s_Player.name), string.lower(s_PlayerSearchString)) then
 			self.m_CalledByPlayer = p_Player
 			self.m_PlayerCalledOn = s_Player
 			break
