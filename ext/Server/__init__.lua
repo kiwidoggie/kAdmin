@@ -1,17 +1,20 @@
 class "kAdminServer"
 
+
+local function string_StartWith( String, Start )
+   return string.sub( String, 1, string.len (Start ) ) == Start
+end
+
 function kAdminServer:__init()
 	self.m_ChatEvent = Events:Subscribe("Player:Chat", self, self.OnChat)
 	self.m_UpdateEvent = Events:Subscribe("Engine:Update", self, self.OnUpdate)
 	
 	self.m_Commands = {
-		["!voteban"] = self.OnVoteBan,
-		["!votekick"] = self.OnVoteKick,
-		["!y"] = self.OnYes,
-		["!n"] = self.OnNo,
-		["!yes"] = self.OnYes,
-		["!no"] = self.OnNo,
-		["!cancel"] = self.OnCancel
+		["voteban"] = self.OnVoteBan,
+		["votekick"] = self.OnVoteKick,
+		["yes"] = self.OnYes,
+		["no"] = self.OnNo,
+		["cancel"] = self.OnCancel
 	}
 	
 	self.m_MaxTime = 30.0 -- max call a vote for for 30s
@@ -32,20 +35,22 @@ function kAdminServer:OnChat(p_Player, p_Mask, p_Message)
 	if p_Player == nil then
 		return
 	end
-	
-	local s_Commands = split(p_Message, " ")
-	
-	local s_Command = s_Commands[1]
-	if s_Command == nil then
-		return
+	if string.len(p_Message) < 2 and p_Message[1] ~= "!"  then return end -- less than 2 char and not ! at the start
+	p_Message = string.sub(p_Message, 2, string.len(p_Message)) -- remove the "!"  (and then remove kebab)
+	if string.find(p_Message, " ") then -- cut space and after
+		p_Message = string.sub(p_Message, 1, select(1, string.find(p_Message, " "))-1) -- find space and remove after
 	end
-	
-	s_Function = self.m_Commands[s_Command]
-	if s_Function == nil then
-		return
+
+	local found = 0;
+	local foundstr;
+	for k, v in pairs(self.m_Commands) do
+		if string_StartWith(v, p_Message) then
+			found = found + 1
+			foundfunc = self.m_Commands[found];
+		end
 	end
-	
-	s_Function(self, p_Player, p_Mask, p_Message, s_Commands)
+	if found ~= 1 then return end -- if found < 1 , found nothing, if > 1, we got two commands with the same start
+	foundfunc(self, p_Player, p_Mask, p_Message, s_Commands)
 end
 
 function kAdminServer:OnUpdate(p_Delta, p_SimulationDelta)
@@ -291,24 +296,3 @@ function kAdminServer:OnCancel(p_Player, p_Mask, p_Message, p_Commands)
 		ServerChatManager:SendMessage("[kAdmin] Vote cancelled!")
 	end
 end
--- Copy pasta'd from http://www.computercraft.info/forums2/index.php?/topic/930-lua-string-split/page__p__93664#entry93664
-function split(pString, pPattern)
-   local Table = {}  -- NOTE: use {n = 0} in Lua-5.0
-   local fpat = "(.-)" .. pPattern
-   local last_end = 1
-   local s, e, cap = pString:find(fpat, 1)
-   while s do
-	  if s ~= 1 or cap ~= "" then
-	 table.insert(Table,cap)
-	  end
-	  last_end = e+1
-	  s, e, cap = pString:find(fpat, last_end)
-   end
-   if last_end <= #pString then
-	  cap = pString:sub(last_end)
-	  table.insert(Table, cap)
-   end
-   return Table
-end
-
-local g_AdminServer = kAdminServer()
