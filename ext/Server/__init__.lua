@@ -153,11 +153,11 @@ function kAdminServer:OnVoteBan(p_Player, p_Mask, p_Message, p_Commands)
 	end
 	
 	local s_PlayerSearchString = p_Commands[2]
-	print("PlayerSearch:" .. s_PlayerSearchString)
+	--print("PlayerSearch:" .. s_PlayerSearchString)
 	
 	local s_Players = PlayerManager:GetPlayers()
 	for s_Index, s_Player in pairs(s_Players) do
-		print("Searching:" .. s_Player.name)
+		--print("Searching:" .. s_Player.name)
 		
 		if string.match(s_Player.name, s_PlayerSearchString) then
 			self.m_CalledByPlayerId = p_Player.id
@@ -205,11 +205,11 @@ function kAdminServer:OnVoteKick(p_Player, p_Mask, p_Message, p_Commands)
 	self.m_IsVoteCalled = true
 	
 	local s_PlayerSearchString = p_Commands[2]
-	print("PlayerSearch:" .. s_PlayerSearchString)
+	--print("PlayerSearch:" .. s_PlayerSearchString)
 	
 	local s_Players = PlayerManager:GetPlayers()
 	for s_Index, s_Player in pairs(s_Players) do
-		print("Searching:" .. s_Player.name)
+		--print("Searching:" .. s_Player.name)
 		
 		if string.match(string.lower(s_Player.name), string.lower(s_PlayerSearchString)) then
 			self.m_CalledByPlayerId = p_Player.id
