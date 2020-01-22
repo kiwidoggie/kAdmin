@@ -1,9 +1,9 @@
 {
 	"Name": "kAdmin",
-	"Authors": [ "kiwidog" ],
+	"Authors": ["kiwidog"],
 	"Description": "In-game administration",
-	"URL": "http://veniceunleashed.net",
-	"Version": 1,
+	"URL": "https://veniceunleashed.net",
+	"Version": "0",
 	"HasWebUI": false,
 	"HasVeniceEXT": true
 }

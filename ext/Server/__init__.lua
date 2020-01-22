@@ -14,16 +14,27 @@ function kAdminServer:__init()
 		["!cancel"] = self.OnCancel
 	}
 	
-	self.m_MaxTime = 30.0 -- max call a vote for for 30s
+	-- Maximum time for a vote (in seconds)
+	self.m_MaxTime = 30.0
+
+	-- Current count-up timer
 	self.m_CurrentTime = 0.0
+
+	-- Is there currently a vote in session
 	self.m_IsVoteCalled = false
 	
+	-- Is the vote to kick or ban someone
 	self.m_VoteType = "none" -- "kick" "ban"
-	self.m_CalledByPlayer = nil
-	self.m_PlayerCalledOn = nil
+
+	-- Player who called the vote (id, use player manager to get reference)
+	self.m_CalledByPlayerId = nil
+
+	-- Player who the vote is attempting to kick/ban (id, use player manager to get reference)
+	self.m_PlayerCalledOnId = nil
 	
+	-- Players who voted yes
 	self.m_PlayersYes = {}
-	self.m_PlayersNo = {}
+
 	-- Forget about the players who don't vote
 end
 
@@ -49,6 +60,7 @@ function kAdminServer:OnChat(p_Player, p_Mask, p_Message)
 end
 
 function kAdminServer:OnUpdate(p_Delta, p_SimulationDelta)
+	-- If there is not a vote being called do not update anything (saves perf)
 	if self.m_IsVoteCalled == false then
 		self.m_CurrentTime = 0.0
 		return
@@ -56,26 +68,30 @@ function kAdminServer:OnUpdate(p_Delta, p_SimulationDelta)
 	
 	-- Check to see if we reached our max time
 	if self.m_CurrentTime >= self.m_MaxTime then
-		
+		-- Call the final results handler
 		self:OnFinalResults()
 		
+		-- Disable that anyone called a vote
 		self.m_IsVoteCalled = false
+
+		-- Reset the timer
 		self.m_CurrentTime = 0.0
 		
-		ServerChatManager:SendMessage("[kAdmin] Vote Expired")
+		ChatManager:SendMessage("[kAdmin] Vote Expired")
 		print("Vote Expired")
 		return
 	end
 	
 	-- Increment our delta
 	self.m_CurrentTime = self.m_CurrentTime + p_Delta
-	
-	
 end
 
 function kAdminServer:OnFinalResults()
-	local s_YesCount = table.getn(self.m_PlayersYes)
-	local s_NoCount = table.getn(self.m_PlayersNo)
+	s_YesCount = 0
+	for _, ignored in pairs(self.m_PlayersYes) do
+		s_YesCount = s_YesCount + 1
+	end
+
 	local s_PlayerCount = PlayerManager:GetPlayerCount()
 	
 	-- If our player count is zero, how in the heck did this get called?
@@ -86,26 +102,32 @@ function kAdminServer:OnFinalResults()
 	local s_Percentage = s_YesCount / s_PlayerCount
 	if s_Percentage >= 0.5 then
 		print("[kAdmin] Vote passed.")
-		if self.m_VoteType == "kick" then
-			self.m_PlayerCalledOn:kick()
+
+		-- Get the player from the player manager
+		s_PlayerCalledOn = PlayerManager:GetPlayerById(self.m_PlayerCalledOnId)
+		if s_PlayerCalledOn ~= nil then
+			if self.m_VoteType == "kick" then
+				print("[kAdmin] Player " .. s_PlayerCalledOn.name .. " has been kicked from the server!")
+				ChatManager:SendMessage("[kAdmin] Player " .. s_PlayerCalledOn.name .. " has been kicked from the server!")
+				s_PlayerCalledOn:Kick()
+			end
+			
+			if self.m_VoteType == "ban" then
+				print("[kAdmin] Player " .. s_PlayerCalledOn.name .. " has been BANNED from the server!")
+				ChatManager:SendMessage("[kAdmin] Player " .. s_PlayerCalledOn.name .. " has been BANNED from the server!")
+				s_PlayerCalledOn:Ban()
+			end
 		end
-		
-		if self.m_VoteType == "ban" then
-			self.m_PlayerCalledOn:ban()
-		end
-		
-		ServerChatManager:SendMessage("[kAdmin] Vote Passed!")
 	else
-		print("[kAdmin] Vote failed.")
-		ServerChatManager:SendMessage("[kAdmin] Vote Failed!")
+		print("[kAdmin] Vote failed, not enough votes (" .. s_YesCount .. "/" .. s_PlayerCount .. ")")
+		ChatManager:SendMessage("[kAdmin] Vote failed, not enough votes (" .. s_YesCount .. "/" .. s_PlayerCount .. ")")
 	end
 	
-	self.m_CalledByPlayer = nil
-	self.m_PlayerCalledOn = nil
+	self.m_CalledByPlayerId = nil
+	self.m_PlayerCalledOnId = nil
 	self.m_IsVoteCalled = false
 	self.m_VoteType = "none"
 	self.m_PlayersYes = {}
-	self.m_PlayersNo = {}
 	print("[kAdmin] Vote reset.")
 end
 
@@ -120,8 +142,13 @@ function kAdminServer:OnVoteBan(p_Player, p_Mask, p_Message, p_Commands)
 	
 	-- Set that there is a vote in progress
 	self.m_IsVoteCalled = true
-	
-	if table.getn(p_Commands) < 2 then
+
+	s_CommandLength = 0
+	for _, ignored in pairs(p_Commands) do
+		s_CommandLength = s_CommandLength + 1
+	end
+
+	if s_CommandLength < 2 then
 		return
 	end
 	
@@ -133,30 +160,31 @@ function kAdminServer:OnVoteBan(p_Player, p_Mask, p_Message, p_Commands)
 		print("Searching:" .. s_Player.name)
 		
 		if string.match(s_Player.name, s_PlayerSearchString) then
-			self.m_CalledByPlayer = p_Player
-			self.m_PlayerCalledOn = s_Player
+			self.m_CalledByPlayerId = p_Player.id
+			self.m_PlayerCalledOnId = s_Player.id
 			break
 		end
 	end
 	
-	if self.m_PlayerCalledOn == nil then
+	-- Validate that we have a correct id
+	if self.m_PlayerCalledOnId == nil then
 		self.m_IsVoteCalled = false
 		print("PlayerCalledOn is invalid.")
 		return
 	end
 	
-	if self.m_CalledByPlayer == nil then
+	-- Validate that the player that called it still exists
+	if self.m_CalledByPlayerId == nil then
 		self.m_IsVoteCalled = false
 		print("CalledByPlayer is invalid.")
 		return
 	end
 	
-	if self.m_PlayerCalledOn.name == self.m_CalledByPlayer.name then
-		print("Dumbass " .. self.m_PlayerCalledOn.name .. " tried to call a vote on him/her/itself.")
-		self.m_CalledByPlayer = nil
-		self.m_PlayerCalledOn = nil
+	if self.m_PlayerCalledOnId == self.m_CalledByPlayerId then
+		print("Dumbass " .. self.m_PlayerCalledOnId .. " tried to call a vote on him/her/itself.")
+		self.m_CalledByPlayerId = nil
+		self.m_PlayerCalledOnId = nil
 		self.m_IsVoteCalled = false
-		-- TODO: Send message back to player saying they are a dumbass
 		return
 	end
 	
@@ -184,90 +212,81 @@ function kAdminServer:OnVoteKick(p_Player, p_Mask, p_Message, p_Commands)
 		print("Searching:" .. s_Player.name)
 		
 		if string.match(string.lower(s_Player.name), string.lower(s_PlayerSearchString)) then
-			self.m_CalledByPlayer = p_Player
-			self.m_PlayerCalledOn = s_Player
+			self.m_CalledByPlayerId = p_Player.id
+			self.m_PlayerCalledOnId = s_Player.id
 			break
 		end
 	end
 	
-	if self.m_PlayerCalledOn == nil then
+	if self.m_PlayerCalledOnId == nil then
 		self.m_IsVoteCalled = false
 		print("PlayerCalledOn is invalid.")
 		return
 	end
 	
-	if self.m_CalledByPlayer == nil then
+	if self.m_CalledByPlayerId == nil then
 		self.m_IsVoteCalled = false
 		print("CalledByPlayer is invalid.")
 		return
 	end
 	
-	if self.m_PlayerCalledOn.name == self.m_CalledByPlayer.name then
-		print("Dumbass " .. self.m_PlayerCalledOn.name .. " tried to call a vote on him/her/itself.")
-		self.m_CalledByPlayer = nil
-		self.m_PlayerCalledOn = nil
+	if self.m_PlayerCalledOnId == self.m_CalledByPlayerId then
+		print("Dumbass " .. self.m_PlayerCalledOnId .. " tried to call a vote on him/her/itself.")
+		self.m_CalledByPlayerId = nil
+		self.m_PlayerCalledOnId = nil
 		self.m_IsVoteCalled = false
 		return
 	end
 	
 	self.m_VoteType = "kick"
 	
+
+	self:OnYes(PlayerManager:GetPlayerById(self.m_CalledByPlayerId), 0, "", {"", ""})
 	self:EchoVote()
 end
 
 function kAdminServer:EchoVote()
-	if self.m_CalledByPlayer == nil then
+	if self.m_CalledByPlayerId == nil then
 		return
 	end
 	
-	if self.m_PlayerCalledOn == nil then
+	if self.m_PlayerCalledOnId == nil then
+		return
+	end
+
+	s_CalledByPlayer = PlayerManager:GetPlayerById(self.m_CalledByPlayerId)
+	if s_CalledByPlayer == nil then
+		return
+	end
+
+	s_PlayerCalledOn = PlayerManager:GetPlayerById(self.m_PlayerCalledOnId)
+	if s_PlayerCalledOn == nil then
 		return
 	end
 	
-	print("[kAdmin] Player " .. self.m_CalledByPlayer.name .. " called a vote to kick on " .. self.m_PlayerCalledOn.name)
-	ServerChatManager:SendMessage("[kAdmin] Vote to " .. self.m_VoteType .. " " .. self.m_PlayerCalledOn.name .. " has started! Vote Yes with !y or !yes and No with !n or !no or cancel with !cancel.")
+	print("[kAdmin] Player " .. s_CalledByPlayer.name .. " called a vote to kick on " .. s_PlayerCalledOn.name)
+	ChatManager:SendMessage("[kAdmin] Vote to " .. self.m_VoteType .. " " .. s_PlayerCalledOn.name .. " has started! Vote Yes with !y or !yes and No with !n or !no or cancel with !cancel.")
 end
 
 function kAdminServer:OnYes(p_Player, p_Mask, p_Message, p_Commands)
-	local s_PlayerName = p_Player.name
-	
 	-- Don't allow a player to vote more than once
-	for i, v in ipairs(self.m_PlayersYes) do
-		if string.match(v.name, s_PlayerName) then
+	for playerIndex, playerId in ipairs(self.m_PlayersYes) do
+		if playerId == p_Player.id then
 			return
 		end
 	end
 	
-	-- If players want to switch their vote remove them from the Yes Vote
-	for i, v in ipairs(self.m_PlayersNo) do
-		if string:match(v.name, s_PlayerName) then
-			self.m_PlayersNo:remove(i)
-			break
-		end
-	end
-	
-	table.insert(self.m_PlayersYes, p_Player)
+	table.insert(self.m_PlayersYes, p_Player.id)
 end
 
-function kAdminServer:OnNo(p_Player, p_Mask, p_Message, p_Commands)
-	local s_PlayerName = p_Player.name
-	
-	-- Don't allow a player to vote more than once
-	for i, v in ipairs(self.m_PlayersNo) do
-		if string.match(v.name, s_PlayerName) then
+function kAdminServer:OnNo(p_Player, p_Mask, p_Message, p_Commands)	
+	-- If players want to switch their vote remove them from the Yes Vote
+	for i, v in ipairs(self.m_PlayersYes) do
+		if v == p_Player.id then
+			self.m_PlayersYes:remove(i)
 			return
 		end
 	end
-	
-	-- If players want to switch their vote remove them from the Yes Vote
-	for i, v in ipairs(self.m_PlayersYes) do
-		if string.match(v.name, s_PlayerName) then
-			self.m_PlayersYes:remove(i)
-			break
-		end
-	end
-	
-	table.insert(self.m_PlayersNo, p_Player)
 end
 
 function kAdminServer:OnCancel(p_Player, p_Mask, p_Message, p_Commands)
@@ -275,7 +294,7 @@ function kAdminServer:OnCancel(p_Player, p_Mask, p_Message, p_Commands)
 		return
 	end
 	
-	if self.m_CalledByPlayer == nil then
+	if self.m_CalledByPlayerId == nil then
 		return
 	end
 	
@@ -283,12 +302,12 @@ function kAdminServer:OnCancel(p_Player, p_Mask, p_Message, p_Commands)
 		return
 	end
 	
-	if string.match(p_Player.name, self.m_CalledByPlayer.name) then
-		self.m_CalledByPlayer = nil
-		self.m_PlayerCalledOn = nil
+	if self.m_CalledByPlayerId == p_Player.id then
+		self.m_CalledByPlayerId = nil
+		self.m_PlayerCalledOnId = nil
 		self.m_IsVoteCalled = false
 		self.m_VoteType = "none"
-		ServerChatManager:SendMessage("[kAdmin] Vote cancelled!")
+		ChatManager:SendMessage("[kAdmin] Vote cancelled!")
 	end
 end
 -- Copy pasta'd from http://www.computercraft.info/forums2/index.php?/topic/930-lua-string-split/page__p__93664#entry93664
